@@ -87,8 +87,7 @@ export type ExtractParams = Pick<CustomFile, 'wikiQuery' | 'model' | 'sourceUrl'
   file_name?: string;
   allowedNodes?: string[];
   allowedRelationship?: string[];
-  nodeProperties?: string;
-  relationshipProperties?: string;
+  schemaSpec?: string;
   gcs_project_id?: string;
   retry_condition: string;
   additional_instructions?: string;
@@ -1012,10 +1011,10 @@ export interface FileContextType {
   setDbWithPropsRels: Dispatch<SetStateAction<OptionType[]>>;
   dbWithPropsPattern: string[];
   setDbWithPropsPattern: Dispatch<SetStateAction<string[]>>;
-  dbNodeProperties: Record<string, string[]>;
-  setDbNodeProperties: Dispatch<SetStateAction<Record<string, string[]>>>;
-  dbRelProperties: Record<string, string[]>;
-  setDbRelProperties: Dispatch<SetStateAction<Record<string, string[]>>>;
+  dbNodeProperties: Record<string, PropertySpec[]>;
+  setDbNodeProperties: Dispatch<SetStateAction<Record<string, PropertySpec[]>>>;
+  dbRelProperties: Record<string, PropertySpec[]>;
+  setDbRelProperties: Dispatch<SetStateAction<Record<string, PropertySpec[]>>>;
   // Predefined schema
   predefinedSchemaDialog: predefinedSchemaDialogType;
   setPredefinedSchemaDialog: React.Dispatch<React.SetStateAction<predefinedSchemaDialogType>>;
@@ -1200,6 +1199,6 @@ export interface SchemaSelectionProps {
   onCancel: () => void;
   view?: string;
   message?: string;
-  nodeProperties?: Record<string, string[]>;
-  relProperties?: Record<string, string[]>;
+  nodeProperties?: Record<string, PropertySpec[]>;
+  relProperties?: Record<string, PropertySpec[]>;
 }

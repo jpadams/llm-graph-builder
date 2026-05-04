@@ -1,20 +1,17 @@
-import { OptionType, NodeSpec, RelSpec, PatternSpec, PropertySpec, SchemaSpec, SchemaPropertyType } from '../types';
-
-const DEFAULT_PROPERTY_TYPE: SchemaPropertyType = 'STRING';
-
-const toPropertySpec = (name: string): PropertySpec => ({ name, type: DEFAULT_PROPERTY_TYPE });
+import { OptionType, NodeSpec, RelSpec, PatternSpec, PropertySpec, SchemaSpec } from '../types';
 
 /**
- * Build a typed SchemaSpec from the current FileContext state. Property types are
- * defaulted to STRING; the typed-property channel will be richer once Phase 7 of
- * the migration switches the extractor to neo4j-graphrag's GraphSchema.
+ * Build a typed SchemaSpec from the current FileContext state. The property
+ * type info is preserved end-to-end (TTL xsd:integer / xsd:dateTime / etc. and
+ * Data Importer typed property entries flow through ``dbNodeProperties`` /
+ * ``dbRelProperties`` as ``PropertySpec[]``).
  */
 export const buildSchemaSpec = (
-  selectedNodes: OptionType[],
-  selectedRels: OptionType[],
-  combinedPatterns: string[],
-  dbNodeProperties: Record<string, string[]>,
-  dbRelProperties: Record<string, string[]>
+  selectedNodes: readonly OptionType[],
+  selectedRels: readonly OptionType[],
+  combinedPatterns: readonly string[],
+  dbNodeProperties: Record<string, PropertySpec[]>,
+  dbRelProperties: Record<string, PropertySpec[]>
 ): SchemaSpec | null => {
   if (!selectedNodes.length && !selectedRels.length && !combinedPatterns.length) {
     return null;
@@ -46,14 +43,14 @@ export const buildSchemaSpec = (
     .sort()
     .map((label) => ({
       label,
-      properties: (dbNodeProperties[label] ?? []).map(toPropertySpec),
+      properties: dbNodeProperties[label] ?? [],
     }));
 
   const relationships: RelSpec[] = Array.from(relLabels)
     .sort()
     .map((label) => ({
       label,
-      properties: (dbRelProperties[label] ?? []).map(toPropertySpec),
+      properties: dbRelProperties[label] ?? [],
     }));
 
   return {

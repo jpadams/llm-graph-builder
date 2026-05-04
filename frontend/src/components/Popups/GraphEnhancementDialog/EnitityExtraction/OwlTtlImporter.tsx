@@ -1,7 +1,7 @@
 import { Button, Dialog, Dropzone, Flex, Typography } from '@neo4j-ndl/react';
 import { InformationCircleIconOutline } from '@neo4j-ndl/react/icons';
 import { useState } from 'react';
-import { OptionType, SchemaSpec, TupleType } from '../../../../types';
+import { OptionType, PropertySpec, SchemaSpec, TupleType } from '../../../../types';
 import { useFileContext } from '../../../../context/UsersFiles';
 import { extractOptions, updateSourceTargetTypeOptions } from '../../../../utils/Utils';
 import { getSchemaFromTtl } from '../../../../services/SchemaFromTtl';
@@ -27,12 +27,18 @@ interface OwlTtlImporterDialogProps {
 const buildPatterns = (spec: SchemaSpec): string[] =>
   spec.patterns.map((p) => `${p.sourceLabel} -[:${p.relLabel}]-> ${p.targetLabel}`);
 
-const nodePropMap = (spec: SchemaSpec): Record<string, string[]> =>
-  Object.fromEntries(spec.nodes.map((n) => [n.label, n.properties.map((p) => p.name)]).filter(([_, props]) => (props as string[]).length));
-
-const relPropMap = (spec: SchemaSpec): Record<string, string[]> =>
+const nodePropMap = (spec: SchemaSpec): Record<string, PropertySpec[]> =>
   Object.fromEntries(
-    spec.relationships.map((r) => [r.label, r.properties.map((p) => p.name)]).filter(([_, props]) => (props as string[]).length)
+    spec.nodes
+      .filter((n) => n.properties.length > 0)
+      .map((n) => [n.label, n.properties])
+  );
+
+const relPropMap = (spec: SchemaSpec): Record<string, PropertySpec[]> =>
+  Object.fromEntries(
+    spec.relationships
+      .filter((r) => r.properties.length > 0)
+      .map((r) => [r.label, r.properties])
   );
 
 const OwlTtlImporterDialog = ({ open, onClose, onApply }: OwlTtlImporterDialogProps) => {

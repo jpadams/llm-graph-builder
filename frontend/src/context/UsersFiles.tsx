@@ -10,6 +10,7 @@ import {
   predefinedSchemaDialogType,
   dataImporterSchemaDialogType,
   ttlSchemaDialogType,
+  PropertySpec,
 } from '../types';
 import {
   chatModeLables,
@@ -118,8 +119,8 @@ const FileContextProvider: FC<FileContextProviderProps> = ({ children }) => {
   const [dbWithPropsNodes, setDbWithPropsNodes] = useState<OptionType[]>([]);
   const [dbWithPropsRels, setDbWithPropsRels] = useState<OptionType[]>([]);
   const [dbWithPropsPattern, setDbWithPropsPattern] = useState<string[]>([]);
-  const [dbNodeProperties, setDbNodeProperties] = useState<Record<string, string[]>>({});
-  const [dbRelProperties, setDbRelProperties] = useState<Record<string, string[]>>({});
+  const [dbNodeProperties, setDbNodeProperties] = useState<Record<string, PropertySpec[]>>({});
+  const [dbRelProperties, setDbRelProperties] = useState<Record<string, PropertySpec[]>>({});
 
   useEffect(() => {
     if (selectedNodeLabelstr != null) {

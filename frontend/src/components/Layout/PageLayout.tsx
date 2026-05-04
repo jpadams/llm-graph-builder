@@ -5,7 +5,7 @@ import DrawerChatbot from './DrawerChatbot';
 import Content from '../Content';
 import { clearChatAPI } from '../../services/QnaAPI';
 import { useCredentials } from '../../context/UserCredentials';
-import { connectionState, OptionType } from '../../types';
+import { connectionState, OptionType, PropertySpec } from '../../types';
 import { useMessageContext } from '../../context/UserMessages';
 import { useMediaQuery, Spotlight, SpotlightTour, useSpotlightContext } from '@neo4j-ndl/react';
 import { useFileContext } from '../../context/UsersFiles';
@@ -399,8 +399,8 @@ const PageLayout: React.FC = () => {
       updatedSource: OptionType[],
       updatedTarget: OptionType[],
       updatedType: OptionType[],
-      nodeProperties: Record<string, string[]>,
-      relProperties: Record<string, string[]>
+      nodeProperties: Record<string, PropertySpec[]>,
+      relProperties: Record<string, PropertySpec[]>
     ) => {
       setDbWithPropsPattern((prevPatterns: string[]) => {
         const uniquePatterns = Array.from(new Set([...newPatterns, ...prevPatterns]));

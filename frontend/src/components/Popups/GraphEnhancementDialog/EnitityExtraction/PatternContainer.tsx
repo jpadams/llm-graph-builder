@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Tag } from '@neo4j-ndl/react';
 import { appLabels, tooltips } from '../../../../utils/Constants';
 import { ExploreIcon } from '@neo4j-ndl/react/icons';
-import { OptionType } from '../../../../types';
+import { OptionType, PropertySpec } from '../../../../types';
 import { IconButtonWithToolTip } from '../../../UI/IconButtonToolTip';
 import TooltipWrapper from '../../../UI/TipWrapper';
 
@@ -13,16 +13,21 @@ interface PatternContainerProps {
   highlightPattern?: string;
   nodes?: OptionType[];
   rels?: OptionType[];
-  nodeProperties?: Record<string, string[]>;
-  relProperties?: Record<string, string[]>;
+  nodeProperties?: Record<string, PropertySpec[]>;
+  relProperties?: Record<string, PropertySpec[]>;
 }
 
 const PATTERN_RE = /^(.+?)\s-\[:([A-Z_]+)\]->\s(.+)$/;
 
+const formatProps = (specs: PropertySpec[] | undefined): string =>
+  (specs ?? [])
+    .map((p) => (p.type && p.type !== 'STRING' ? `${p.name}:${p.type}` : p.name))
+    .join(', ');
+
 const buildPropertyTooltip = (
   pattern: string,
-  nodeProperties?: Record<string, string[]>,
-  relProperties?: Record<string, string[]>
+  nodeProperties?: Record<string, PropertySpec[]>,
+  relProperties?: Record<string, PropertySpec[]>
 ): string => {
   const m = pattern.match(PATTERN_RE);
   if (!m) {
@@ -33,13 +38,13 @@ const buildPropertyTooltip = (
   const nProps = nodeProperties ?? {};
   const rProps = relProperties ?? {};
   if (nProps[source]?.length) {
-    lines.push(`${source}: ${nProps[source].join(', ')}`);
+    lines.push(`${source}: ${formatProps(nProps[source])}`);
   }
   if (rProps[rel]?.length) {
-    lines.push(`[:${rel}]: ${rProps[rel].join(', ')}`);
+    lines.push(`[:${rel}]: ${formatProps(rProps[rel])}`);
   }
   if (target !== source && nProps[target]?.length) {
-    lines.push(`${target}: ${nProps[target].join(', ')}`);
+    lines.push(`${target}: ${formatProps(nProps[target])}`);
   }
   return lines.join(' • ');
 };

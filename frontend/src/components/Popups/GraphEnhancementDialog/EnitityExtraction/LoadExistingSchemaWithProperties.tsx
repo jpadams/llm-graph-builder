@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import SchemaSelectionDialog from '../../../UI/SchemaSelectionPopup';
 import { getSchemaWithProperties } from '../../../../services/GetSchemaWithProperties';
-import { OptionType, TupleType } from '../../../../types';
+import { OptionType, PropertySpec, TupleType } from '../../../../types';
 import { extractOptions, updateSourceTargetTypeOptions } from '../../../../utils/Utils';
 import { useFileContext } from '../../../../context/UsersFiles';
 import SchemaViz from '../../../../components/Graph/SchemaViz';
@@ -16,10 +16,13 @@ interface LoadDBSchemaWithPropertiesDialogProps {
     updatedSource: OptionType[],
     updatedTarget: OptionType[],
     updatedType: OptionType[],
-    nodeProperties: Record<string, string[]>,
-    relProperties: Record<string, string[]>
+    nodeProperties: Record<string, PropertySpec[]>,
+    relProperties: Record<string, PropertySpec[]>
   ) => void;
 }
+
+const namesToPropertySpecs = (names: string[]): PropertySpec[] =>
+  names.map((name) => ({ name, type: 'STRING' }));
 
 const LoadDBSchemaWithPropertiesDialog = ({ open, onClose, onApply }: LoadDBSchemaWithPropertiesDialogProps) => {
   const [loading, setLoading] = useState<boolean>(false);
@@ -56,8 +59,18 @@ const LoadDBSchemaWithPropertiesDialog = ({ open, onClose, onApply }: LoadDBSche
     try {
       const response = await getSchemaWithProperties();
       const schemaData: string[] = response.data.data.triplets;
-      const nodeProps = response.data.data.nodeProperties || {};
-      const relProps = response.data.data.relationshipProperties || {};
+      // The /schema_with_properties endpoint returns names only (no types).
+      // Wrap each name as a STRING-typed PropertySpec — Neo4j's per-property
+      // type info is unreliable across versions and we get the typed channel
+      // from the TTL/Importer paths instead.
+      const rawNodeProps = response.data.data.nodeProperties || {};
+      const rawRelProps = response.data.data.relationshipProperties || {};
+      const nodeProps: Record<string, PropertySpec[]> = Object.fromEntries(
+        Object.entries(rawNodeProps).map(([k, v]) => [k, namesToPropertySpecs(v)])
+      );
+      const relProps: Record<string, PropertySpec[]> = Object.fromEntries(
+        Object.entries(rawRelProps).map(([k, v]) => [k, namesToPropertySpecs(v)])
+      );
       if (!schemaData || schemaData.length === 0) {
         setDbWithPropsNodes([]);
         setDbWithPropsRels([]);

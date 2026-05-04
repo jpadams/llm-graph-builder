@@ -1,6 +1,6 @@
 import { Button, Dialog } from '@neo4j-ndl/react';
 import { useState } from 'react';
-import { OptionType, TupleType } from '../../../../types';
+import { OptionType, PropertySpec, SchemaPropertyType, TupleType } from '../../../../types';
 import { extractOptions, updateSourceTargetTypeOptions } from '../../../../utils/Utils';
 import { useFileContext } from '../../../../context/UsersFiles';
 import ImporterInput from './ImporterInput';
@@ -32,14 +32,68 @@ const propertyName = (p: any): string | null => {
   return null;
 };
 
-const collectPropertyNames = (props: unknown): string[] => {
-  if (!Array.isArray(props)) return [];
-  const names: string[] = [];
-  for (const p of props) {
-    const n = propertyName(p);
-    if (n && !names.includes(n)) names.push(n);
+const propertyType = (p: any): SchemaPropertyType => {
+  // Walk the variants: type.type, types[0].type, type as string
+  let raw: unknown = p?.type?.type ?? p?.types?.[0]?.type ?? p?.type;
+  if (typeof raw !== 'string') return 'STRING';
+  raw = raw.toLowerCase();
+  switch (raw) {
+    case 'string':
+    case 'normalizedstring':
+    case 'token':
+    case 'anyuri':
+      return 'STRING';
+    case 'integer':
+    case 'int':
+    case 'long':
+    case 'short':
+    case 'byte':
+    case 'unsignedint':
+    case 'unsignedlong':
+    case 'unsignedshort':
+    case 'unsignedbyte':
+    case 'positiveinteger':
+    case 'nonnegativeinteger':
+      return 'INTEGER';
+    case 'float':
+    case 'double':
+    case 'decimal':
+      return 'FLOAT';
+    case 'boolean':
+    case 'bool':
+      return 'BOOLEAN';
+    case 'date':
+      return 'DATE';
+    case 'datetime':
+    case 'datetimestamp':
+    case 'localdatetime':
+      return 'LOCAL_DATETIME';
+    case 'list':
+    case 'array':
+      return 'LIST';
+    default:
+      return 'STRING';
   }
-  return names;
+};
+
+const collectPropertySpecs = (props: unknown): PropertySpec[] => {
+  if (!Array.isArray(props)) return [];
+  const seen = new Set<string>();
+  const out: PropertySpec[] = [];
+  for (const p of props) {
+    const name = propertyName(p);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push({ name, type: propertyType(p) });
+  }
+  return out;
+};
+
+const mergePropertySpecs = (existing: PropertySpec[] | undefined, next: PropertySpec[]): PropertySpec[] => {
+  const byName = new Map<string, PropertySpec>();
+  for (const p of existing ?? []) byName.set(p.name, p);
+  for (const p of next) if (!byName.has(p.name)) byName.set(p.name, p);
+  return Array.from(byName.values());
 };
 
 const DataImporterSchemaDialog = ({ open, onClose, onApply }: DataImporterDialogProps) => {
@@ -133,18 +187,18 @@ const DataImporterSchemaDialog = ({ open, onClose, onApply }: DataImporterDialog
               const nodeLabelMap = Object.fromEntries(nodeLabels.map((n: any) => [n.$id, n.token]));
               const relTypeMap = Object.fromEntries(relationshipTypes.map((r: any) => [r.$id, r.token]));
               const nodeIdToLabel: Record<string, string> = {};
-              const nodeIdToProperties: Record<string, string[]> = {};
+              const nodeIdToProperties: Record<string, PropertySpec[]> = {};
               nodeObjectTypes.forEach((nodeObj: any) => {
                 const labelRef = nodeObj.labels?.[0]?.$ref;
                 if (labelRef && nodeLabelMap[labelRef.slice(1)]) {
                   nodeIdToLabel[nodeObj.$id] = nodeLabelMap[labelRef.slice(1)];
-                  nodeIdToProperties[nodeObj.$id] = collectPropertyNames(nodeObj.properties);
+                  nodeIdToProperties[nodeObj.$id] = collectPropertySpecs(nodeObj.properties);
                 }
               });
 
               const patterns: string[] = [];
-              const nodePropsByLabel: Record<string, string[]> = {};
-              const relPropsByType: Record<string, string[]> = {};
+              const nodePropsByLabel: Record<string, PropertySpec[]> = {};
+              const relPropsByType: Record<string, PropertySpec[]> = {};
 
               relationshipObjectTypes.forEach((relObj: any) => {
                 const fromId = relObj.from.$ref.slice(1);
@@ -159,14 +213,14 @@ const DataImporterSchemaDialog = ({ open, onClose, onApply }: DataImporterDialog
                   [fromId, fromLabel],
                   [toId, toLabel],
                 ] as const) {
-                  const props = nodeIdToProperties[labelId] ?? [];
-                  if (!props.length) continue;
-                  nodePropsByLabel[label] = Array.from(new Set([...(nodePropsByLabel[label] ?? []), ...props]));
+                  const specs = nodeIdToProperties[labelId] ?? [];
+                  if (!specs.length) continue;
+                  nodePropsByLabel[label] = mergePropertySpecs(nodePropsByLabel[label], specs);
                 }
                 // Relationship properties
-                const relProps = collectPropertyNames(relObj.properties);
-                if (relProps.length) {
-                  relPropsByType[relLabel] = Array.from(new Set([...(relPropsByType[relLabel] ?? []), ...relProps]));
+                const relSpecs = collectPropertySpecs(relObj.properties);
+                if (relSpecs.length) {
+                  relPropsByType[relLabel] = mergePropertySpecs(relPropsByType[relLabel], relSpecs);
                 }
               });
 

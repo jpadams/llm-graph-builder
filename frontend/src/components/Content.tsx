@@ -335,9 +335,9 @@ const Content: React.FC<ContentProps> = ({
         triggerStatusUpdateAPI(name as string, userCredentials, updateStatusForLargeFiles);
       }
 
-      // Restrict property maps to labels/rel-types that are still in the user's selected schema.
-      // dbNodeProperties / dbRelProperties only get populated by the
-      // "Load Existing Schema (with properties)" path; otherwise they're empty objects.
+      // Restrict property maps to labels/rel-types that are still in the user's
+      // selected schema (defensive — they're populated by the schema-source dialogs
+      // and the user may have removed individual patterns afterwards).
       const selectedNodeLabelSet = new Set(selectedNodes.map((l) => l.value));
       const selectedRelTypeSet = new Set(selectedRels.map((t) => t.value.split(',')[1]));
       const scopedNodeProperties = Object.fromEntries(
@@ -366,8 +366,6 @@ const Content: React.FC<ContentProps> = ({
         fileItem.language,
         fileItem.accessToken,
         additionalInstructions,
-        scopedNodeProperties,
-        scopedRelProperties,
         buildSchemaSpec(selectedNodes, selectedRels, combinedPatterns, scopedNodeProperties, scopedRelProperties)
       );
       if (apiResponse?.status === 'Failed') {

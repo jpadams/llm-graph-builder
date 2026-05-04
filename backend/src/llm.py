@@ -1,3 +1,4 @@
+import json
 import logging
 from langchain_core.documents import Document
 import os
@@ -5,7 +6,6 @@ from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from langchain_google_vertexai import ChatVertexAI
 from langchain_groq import ChatGroq
 from langchain_google_vertexai import HarmBlockThreshold, HarmCategory
-from langchain_experimental.graph_transformers.diffbot import DiffbotGraphTransformer
 from langchain_experimental.graph_transformers import LLMGraphTransformer
 from langchain_experimental.graph_transformers.llm import _Graph
 from langchain_anthropic import ChatAnthropic
@@ -115,15 +115,11 @@ def get_llm(model: str):
             llm = ChatOllama(base_url=base_url, model=model_name,callbacks=callback_manager)
 
         elif "DIFFBOT" in model:
-            #model_name = "diffbot"
-            model_name, api_key = env_value.split(",")
-            llm = DiffbotGraphTransformer(
-                diffbot_api_key=api_key,
-                extract_types=["entities", "facts"],
+            raise LLMGraphBuilderException(
+                "Diffbot is no longer supported. Pick a different model — see release notes."
             )
-            callback_handler = None
-        
-        else: 
+
+        else:
             model_name, api_endpoint, api_key = env_value.split(",")
             llm = ChatOpenAI(
                 api_key=api_key,
@@ -187,46 +183,62 @@ def get_chunk_id_as_doc_metadata(chunkId_chunkDoc_list):
       
 
 async def get_graph_document_list(
-    llm, combined_chunk_document_list, allowedNodes, allowedRelationship,callback_handler, additional_instructions=None
+    llm, combined_chunk_document_list, allowedNodes, allowedRelationship, callback_handler,
+    additional_instructions=None, node_properties_map=None, relationship_properties_map=None
 ):
     if additional_instructions:
         additional_instructions = sanitize_additional_instruction(additional_instructions)
     graph_document_list = []
     token_usage = 0
     try:
-        if "diffbot_api_key" in dir(llm):
-            llm_transformer = llm
+        try:
+            llm.with_structured_output(_Graph)
+            supports_structured_output = True
+        except Exception:
+            supports_structured_output = False
+        if supports_structured_output and not isinstance(llm, ChatGroq):
+            logging.info("LLM supports structured output; including descriptions in graph")
+            node_properties = ["description"]
+            relationship_properties = ["description"]
+            ignore_tool_usage = False
         else:
-            try:
-                llm.with_structured_output(_Graph)
-                supports_structured_output = True
-            except Exception:
-                supports_structured_output = False
-            if supports_structured_output and not isinstance(llm, ChatGroq):
-                logging.info("LLM supports structured output; including descriptions in graph")
-                node_properties = ["description"]
-                relationship_properties = ["description"]
-                ignore_tool_usage = False
-            else:
-                logging.info("LLM does not support structured output; excluding descriptions in graph") 
-                node_properties = False
-                relationship_properties = False
-                ignore_tool_usage = True
-            
-            llm_transformer = LLMGraphTransformer(
-                llm=llm,
-                node_properties=node_properties,
-                relationship_properties=relationship_properties,
-                allowed_nodes=allowedNodes,
-                allowed_relationships=allowedRelationship,
-                ignore_tool_usage=ignore_tool_usage,
-                additional_instructions=ADDITIONAL_INSTRUCTIONS+ (additional_instructions if additional_instructions else "")
-            )
-        
-        if isinstance(llm,DiffbotGraphTransformer):
-            graph_document_list = llm_transformer.convert_to_graph_documents(combined_chunk_document_list)
-        else:
-            graph_document_list = await llm_transformer.aconvert_to_graph_documents(combined_chunk_document_list)
+            logging.info("LLM does not support structured output; excluding descriptions in graph")
+            node_properties = False
+            relationship_properties = False
+            ignore_tool_usage = True
+
+        # If the user supplied per-label property maps (from "Load Existing Schema with Properties"),
+        # union those into the flat list LangChain accepts and append per-label guidance to
+        # additional_instructions so the LLM knows which props belong to which label/rel-type.
+        #
+        # IMPORTANT: avoid curly braces in the appended text — LLMGraphTransformer feeds this
+        # into a ChatPromptTemplate which treats `{name}` as a template variable. JSON.dumps
+        # would emit `{"Person":[...]}` and break the prompt build with INVALID_PROMPT_INPUT.
+        # Use a brace-free text format instead.
+        def _format_props_hint(props_map):
+            return "; ".join(f"{label}: [{', '.join(props)}]" for label, props in props_map.items())
+
+        extra_instructions = ""
+        if node_properties_map and node_properties is not False:
+            extra_node_props = {p for ps in node_properties_map.values() for p in ps if p}
+            node_properties = sorted({"description", *extra_node_props})
+            extra_instructions += " Per-node-label properties to extract when applicable: " + _format_props_hint(node_properties_map) + "."
+        if relationship_properties_map and relationship_properties is not False:
+            extra_rel_props = {p for ps in relationship_properties_map.values() for p in ps if p}
+            relationship_properties = sorted({"description", *extra_rel_props})
+            extra_instructions += " Per-relationship-type properties to extract when applicable: " + _format_props_hint(relationship_properties_map) + "."
+
+        llm_transformer = LLMGraphTransformer(
+            llm=llm,
+            node_properties=node_properties,
+            relationship_properties=relationship_properties,
+            allowed_nodes=allowedNodes,
+            allowed_relationships=allowedRelationship,
+            ignore_tool_usage=ignore_tool_usage,
+            additional_instructions=ADDITIONAL_INSTRUCTIONS + (additional_instructions if additional_instructions else "") + extra_instructions
+        )
+
+        graph_document_list = await llm_transformer.aconvert_to_graph_documents(combined_chunk_document_list)
     except Exception as e:
        logging.error(f"Error in graph transformation: {e}", exc_info=True)
        raise LLMGraphBuilderException(f"Graph transformation failed: {str(e)}")
@@ -240,20 +252,53 @@ async def get_graph_document_list(
 
     return graph_document_list, token_usage
 
-async def get_graph_from_llm(model, chunkId_chunkDoc_list, allowedNodes, allowedRelationship, chunks_to_combine, additional_instructions=None):
+async def get_graph_from_llm(model, chunkId_chunkDoc_list, allowedNodes, allowedRelationship, chunks_to_combine, additional_instructions=None, nodeProperties=None, relationshipProperties=None, schemaSpec=None):
    try:
-       llm, model_name,callback_handler = get_llm(model)
-       logging.info(f"Using model: {model_name}")
-    
+       use_graphrag = get_value_from_env("USE_GRAPHRAG_EXTRACTOR", "False", "bool")
+       if use_graphrag:
+           logging.info("USE_GRAPHRAG_EXTRACTOR=true; routing extraction through neo4j-graphrag")
+       else:
+           llm, model_name,callback_handler = get_llm(model)
+           logging.info(f"Using model: {model_name}")
+
        combined_chunk_document_list = get_combined_chunks(chunkId_chunkDoc_list, chunks_to_combine)
        logging.info(f"Combined {len(combined_chunk_document_list)} chunks")
-    
+
+       # If a typed SchemaSpec was POSTed, derive allowedNodes / allowedRelationship /
+       # nodeProperties / relationshipProperties from it. The legacy form fields are
+       # still read for backward compatibility, but schemaSpec wins when both are sent.
+       schema_spec_obj = _parse_schema_spec(schemaSpec)
+       if schema_spec_obj is not None:
+           if not allowedNodes:
+               allowedNodes = ",".join(n.label for n in schema_spec_obj.nodes)
+           if not allowedRelationship:
+               allowedRelationship = ",".join(
+                   f"{p.source_label},{p.rel_label},{p.target_label}"
+                   for p in schema_spec_obj.patterns
+               )
+           if not nodeProperties:
+               node_props = {
+                   n.label: [p.name for p in n.properties]
+                   for n in schema_spec_obj.nodes
+                   if n.properties
+               }
+               if node_props:
+                   nodeProperties = json.dumps(node_props)
+           if not relationshipProperties:
+               rel_props = {
+                   r.label: [p.name for p in r.properties]
+                   for r in schema_spec_obj.relationships
+                   if r.properties
+               }
+               if rel_props:
+                   relationshipProperties = json.dumps(rel_props)
+
        if allowedNodes:
            allowed_nodes = [node.strip() for node in allowedNodes.split(',') if node.strip()]
        else:
            allowed_nodes = []
        logging.info(f"Allowed nodes: {allowed_nodes}")
-    
+
        allowed_relationships = []
        if allowedRelationship:
            items = [item.strip() for item in allowedRelationship.split(',') if item.strip()]
@@ -271,19 +316,78 @@ async def get_graph_from_llm(model, chunkId_chunkDoc_list, allowedNodes, allowed
        else:
            logging.info("No allowed relationships provided")
 
-       graph_document_list,token_usage = await get_graph_document_list(
-           llm,
-           combined_chunk_document_list,
-           allowed_nodes,
-           allowed_relationships,
-           callback_handler,
-           additional_instructions,
-       )
+       node_properties_map = _parse_property_map(nodeProperties, "nodeProperties")
+       relationship_properties_map = _parse_property_map(relationshipProperties, "relationshipProperties")
+       if node_properties_map:
+           logging.info(f"Node properties map: {node_properties_map}")
+       if relationship_properties_map:
+           logging.info(f"Relationship properties map: {relationship_properties_map}")
+
+       if use_graphrag:
+           from src.graphrag.extractor import derive_schema_spec, extract_via_graphrag
+
+           spec = derive_schema_spec(
+               schema_spec_obj,
+               allowed_nodes,
+               allowed_relationships,
+               node_properties_map,
+               relationship_properties_map,
+           )
+           graph_document_list, token_usage = await extract_via_graphrag(
+               model=model,
+               combined_chunk_document_list=combined_chunk_document_list,
+               schema_spec=spec,
+               additional_instructions=additional_instructions,
+           )
+       else:
+           graph_document_list, token_usage = await get_graph_document_list(
+               llm,
+               combined_chunk_document_list,
+               allowed_nodes,
+               allowed_relationships,
+               callback_handler,
+               additional_instructions,
+               node_properties_map,
+               relationship_properties_map,
+           )
        logging.info(f"Generated {len(graph_document_list)} graph documents")
        return graph_document_list, token_usage
    except Exception as e:
        logging.error(f"Error in get_graph_from_llm: {e}", exc_info=True)
        raise LLMGraphBuilderException(f"Error in getting graph from llm: {e}")
+
+
+def _parse_schema_spec(raw):
+    """Parse a JSON-encoded SchemaSpec from /extract; return SchemaSpec | None."""
+    if not raw:
+        return None
+    try:
+        from src.graphrag.schema_model import SchemaSpec
+        return SchemaSpec.model_validate_json(raw)
+    except Exception as e:
+        logging.warning(f"Could not parse schemaSpec, falling back to legacy fields: {e}")
+        return None
+
+
+def _parse_property_map(raw, label):
+    """Parse a JSON-encoded Dict[str, List[str]] from extract params; tolerate empty/invalid input."""
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError) as e:
+        logging.warning(f"Could not parse {label} as JSON, ignoring: {e}")
+        return None
+    if not isinstance(parsed, dict) or not parsed:
+        return None
+    cleaned = {}
+    for k, v in parsed.items():
+        if not isinstance(k, str) or not isinstance(v, list):
+            continue
+        props = [p for p in v if isinstance(p, str) and p]
+        if props:
+            cleaned[k] = props
+    return cleaned or None
 
 def sanitize_additional_instruction(instruction: str) -> str:
    """

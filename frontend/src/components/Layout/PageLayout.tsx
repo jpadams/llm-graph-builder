@@ -9,7 +9,6 @@ import { connectionState, OptionType } from '../../types';
 import { useMessageContext } from '../../context/UserMessages';
 import { useMediaQuery, Spotlight, SpotlightTour, useSpotlightContext } from '@neo4j-ndl/react';
 import { useFileContext } from '../../context/UsersFiles';
-import SchemaFromTextDialog from '../../components/Popups/GraphEnhancementDialog/EnitityExtraction/SchemaFromTextDialog';
 import useSpeechSynthesis from '../../hooks/useSpeech';
 import FallBackDialog from '../UI/FallBackDialog';
 import { envConnectionAPI } from '../../services/ConnectAPI';
@@ -18,8 +17,8 @@ import { useAuth0 } from '@auth0/auth0-react';
 import { showErrorToast } from '../../utils/Toasts';
 import { APP_SOURCES } from '../../utils/Constants';
 import { createDefaultFormData } from '../../API/Index';
-import LoadDBSchemaDialog from '../Popups/GraphEnhancementDialog/EnitityExtraction/LoadExistingSchema';
-import PredefinedSchemaDialog from '../Popups/GraphEnhancementDialog/EnitityExtraction/PredefinedSchemaDialog';
+import LoadDBSchemaWithPropertiesDialog from '../Popups/GraphEnhancementDialog/EnitityExtraction/LoadExistingSchemaWithProperties';
+import OwlTtlImporterDialog from '../Popups/GraphEnhancementDialog/EnitityExtraction/OwlTtlImporter';
 import { SKIP_AUTH } from '../../utils/Constants';
 import { useNavigate } from 'react-router';
 import { deduplicateByFullPattern, deduplicateNodeByValue, fetchAndStoreEmbeddingSettings } from '../../utils/Utils';
@@ -174,26 +173,20 @@ const PageLayout: React.FC = () => {
     setIsGCSActive,
   } = useCredentials();
   const {
-    setShowTextFromSchemaDialog,
-    showTextFromSchemaDialog,
-    setSchemaTextPattern,
-    schemaLoadDialog,
-    setSchemaLoadDialog,
-    setPredefinedSchemaDialog,
-    setDbPattern,
-    setSchemaValNodes,
-    predefinedSchemaDialog,
-    setSchemaValRels,
-    setDbNodes,
-    setDbRels,
-    setPreDefinedNodes,
-    setPreDefinedRels,
-    setPreDefinedPattern,
+    schemaLoadWithPropertiesDialog,
+    setSchemaLoadWithPropertiesDialog,
+    setDbWithPropsPattern,
+    setDbWithPropsNodes,
+    setDbWithPropsRels,
+    setDbNodeProperties,
+    setDbRelProperties,
     allPatterns,
     selectedNodes,
     selectedRels,
     dataImporterSchemaDialog,
     setDataImporterSchemaDialog,
+    ttlSchemaDialog,
+    setTtlSchemaDialog,
     setImporterPattern,
     setImporterNodes,
     setImporterRels,
@@ -398,16 +391,18 @@ const PageLayout: React.FC = () => {
     }
   }, []);
 
-  const handleApplyPatternsFromText = useCallback(
+  const handleDbWithPropsApply = useCallback(
     (
       newPatterns: string[],
       nodes: OptionType[],
       rels: OptionType[],
       updatedSource: OptionType[],
       updatedTarget: OptionType[],
-      updatedType: OptionType[]
+      updatedType: OptionType[],
+      nodeProperties: Record<string, string[]>,
+      relProperties: Record<string, string[]>
     ) => {
-      setSchemaTextPattern((prevPatterns: string[]) => {
+      setDbWithPropsPattern((prevPatterns: string[]) => {
         const uniquePatterns = Array.from(new Set([...newPatterns, ...prevPatterns]));
         return uniquePatterns;
       });
@@ -415,102 +410,25 @@ const PageLayout: React.FC = () => {
         const uniquePatterns = Array.from(new Set([...newPatterns, ...prevPatterns]));
         return uniquePatterns;
       });
-      setShowTextFromSchemaDialog({
-        triggeredFrom: 'schematextApply',
-        show: true,
-      });
-      setSchemaValNodes(nodes);
+      setSchemaLoadWithPropertiesDialog({ triggeredFrom: 'loadExistingSchemaWithPropertiesApply', show: true });
+      setDbWithPropsNodes(nodes);
       setCombinedNodesVal((prevNodes: OptionType[]) => {
         const combined = [...nodes, ...prevNodes];
         return deduplicateNodeByValue(combined);
       });
-      setSchemaValRels(rels);
+      setDbWithPropsRels(rels);
       setCombinedRelsVal((prevRels: OptionType[]) => {
         const combined = [...rels, ...prevRels];
         return deduplicateByFullPattern(combined);
       });
+      setDbNodeProperties(nodeProperties);
+      setDbRelProperties(relProperties);
       setSourceOptions((prev) => [...prev, ...updatedSource]);
       setTargetOptions((prev) => [...prev, ...updatedTarget]);
       setTypeOptions((prev) => [...prev, ...updatedType]);
     },
     []
   );
-
-  const handleDbApply = useCallback(
-    (
-      newPatterns: string[],
-      nodes: OptionType[],
-      rels: OptionType[],
-      updatedSource: OptionType[],
-      updatedTarget: OptionType[],
-      updatedType: OptionType[]
-    ) => {
-      setDbPattern((prevPatterns: string[]) => {
-        const uniquePatterns = Array.from(new Set([...newPatterns, ...prevPatterns]));
-        return uniquePatterns;
-      });
-      setCombinedPatternsVal((prevPatterns: string[]) => {
-        const uniquePatterns = Array.from(new Set([...newPatterns, ...prevPatterns]));
-        return uniquePatterns;
-      });
-      setSchemaLoadDialog({
-        triggeredFrom: 'loadExistingSchemaApply',
-        show: true,
-      });
-      setDbNodes(nodes);
-      setCombinedNodesVal((prevNodes: OptionType[]) => {
-        const combined = [...nodes, ...prevNodes];
-        return deduplicateNodeByValue(combined);
-      });
-      setDbRels(rels);
-      setCombinedRelsVal((prevRels: OptionType[]) => {
-        const combined = [...rels, ...prevRels];
-        return deduplicateByFullPattern(combined);
-      });
-      setSourceOptions((prev) => [...prev, ...updatedSource]);
-      setTargetOptions((prev) => [...prev, ...updatedTarget]);
-      setTypeOptions((prev) => [...prev, ...updatedType]);
-    },
-    []
-  );
-  const handlePredinedApply = useCallback(
-    (
-      newPatterns: string[],
-      nodes: OptionType[],
-      rels: OptionType[],
-      updatedSource: OptionType[],
-      updatedTarget: OptionType[],
-      updatedType: OptionType[]
-    ) => {
-      setPreDefinedPattern((prevPatterns: string[]) => {
-        const uniquePatterns = Array.from(new Set([...newPatterns, ...prevPatterns]));
-        return uniquePatterns;
-      });
-      setCombinedPatternsVal((prevPatterns: string[]) => {
-        const uniquePatterns = Array.from(new Set([...newPatterns, ...prevPatterns]));
-        return uniquePatterns;
-      });
-      setPredefinedSchemaDialog({
-        triggeredFrom: 'predefinedSchemaApply',
-        show: true,
-      });
-      setPreDefinedNodes(nodes);
-      setCombinedNodesVal((prevNodes: OptionType[]) => {
-        const combined = [...nodes, ...prevNodes];
-        return deduplicateNodeByValue(combined);
-      });
-      setPreDefinedRels(rels);
-      setCombinedRelsVal((prevRels: OptionType[]) => {
-        const combined = [...rels, ...prevRels];
-        return deduplicateByFullPattern(combined);
-      });
-      setSourceOptions((prev) => [...prev, ...updatedSource]);
-      setTargetOptions((prev) => [...prev, ...updatedTarget]);
-      setTypeOptions((prev) => [...prev, ...updatedType]);
-    },
-    []
-  );
-
   const handleImporterApply = useCallback(
     (
       newPatterns: string[],
@@ -549,20 +467,16 @@ const PageLayout: React.FC = () => {
     []
   );
 
-  const openPredefinedSchema = useCallback(() => {
-    setPredefinedSchemaDialog({ triggeredFrom: 'predefinedDialog', show: true });
-  }, []);
-
   const openLoadSchema = useCallback(() => {
-    setSchemaLoadDialog({ triggeredFrom: 'loadDialog', show: true });
-  }, []);
-
-  const openTextSchema = useCallback(() => {
-    setShowTextFromSchemaDialog({ triggeredFrom: 'schemadialog', show: true });
+    setSchemaLoadWithPropertiesDialog({ triggeredFrom: 'loadDialog', show: true });
   }, []);
 
   const openDataImporterSchema = useCallback(() => {
     setDataImporterSchemaDialog({ triggeredFrom: 'schemadialog', show: true });
+  }, []);
+
+  const openTtlSchema = useCallback(() => {
+    setTtlSchemaDialog({ triggeredFrom: 'schemadialog', show: true });
   }, []);
 
   const openChatBot = useCallback(() => setShowChatBot(true), []);
@@ -611,11 +525,11 @@ const PageLayout: React.FC = () => {
           chunksExistsWithDifferentEmbedding={openConnection.chunksExistsWithDifferentDimension}
         />
       </Suspense>
-      <SchemaFromTextDialog
-        open={showTextFromSchemaDialog.show}
+      <LoadDBSchemaWithPropertiesDialog
+        open={schemaLoadWithPropertiesDialog.show}
         onClose={() => {
-          setShowTextFromSchemaDialog({ triggeredFrom: '', show: false });
-          switch (showTextFromSchemaDialog.triggeredFrom) {
+          setSchemaLoadWithPropertiesDialog({ triggeredFrom: '', show: false });
+          switch (schemaLoadWithPropertiesDialog.triggeredFrom) {
             case 'enhancementtab':
               toggleEnhancementDialog();
               break;
@@ -623,36 +537,8 @@ const PageLayout: React.FC = () => {
               break;
           }
         }}
-        onApply={handleApplyPatternsFromText}
-      ></SchemaFromTextDialog>
-      <LoadDBSchemaDialog
-        open={schemaLoadDialog.show}
-        onClose={() => {
-          setSchemaLoadDialog({ triggeredFrom: '', show: false });
-          switch (schemaLoadDialog.triggeredFrom) {
-            case 'enhancementtab':
-              toggleEnhancementDialog();
-              break;
-            default:
-              break;
-          }
-        }}
-        onApply={handleDbApply}
+        onApply={handleDbWithPropsApply}
       />
-      <PredefinedSchemaDialog
-        open={predefinedSchemaDialog.show}
-        onClose={() => {
-          setPredefinedSchemaDialog({ triggeredFrom: '', show: false });
-          switch (predefinedSchemaDialog.triggeredFrom) {
-            case 'enhancementtab':
-              toggleEnhancementDialog();
-              break;
-            default:
-              break;
-          }
-        }}
-        onApply={handlePredinedApply}
-      ></PredefinedSchemaDialog>
       <DataImporterSchemaDialog
         open={dataImporterSchemaDialog.show}
         onClose={() => {
@@ -667,6 +553,20 @@ const PageLayout: React.FC = () => {
         }}
         onApply={handleImporterApply}
       ></DataImporterSchemaDialog>
+      <OwlTtlImporterDialog
+        open={ttlSchemaDialog.show}
+        onClose={() => {
+          setTtlSchemaDialog({ triggeredFrom: '', show: false });
+          switch (ttlSchemaDialog.triggeredFrom) {
+            case 'enhancementtab':
+              toggleEnhancementDialog();
+              break;
+            default:
+              break;
+          }
+        }}
+        onApply={handleImporterApply}
+      ></OwlTtlImporterDialog>
       {isLargeDesktop ? (
         <div
           className={`layout-wrapper ${!isLeftExpanded ? 'drawerdropzoneclosed' : ''} ${
@@ -695,10 +595,9 @@ const PageLayout: React.FC = () => {
           <Content
             openChatBot={openChatBot}
             showChatBot={showChatBot}
-            openTextSchema={openTextSchema}
             openLoadSchema={openLoadSchema}
-            openPredefinedSchema={openPredefinedSchema}
             openDataImporterSchema={openDataImporterSchema}
+            openTtlSchema={openTtlSchema}
             showEnhancementDialog={showEnhancementDialog}
             toggleEnhancementDialog={toggleEnhancementDialog}
             setOpenConnection={setOpenConnection}
@@ -770,10 +669,9 @@ const PageLayout: React.FC = () => {
             <Content
               openChatBot={openChatBot}
               showChatBot={showChatBot}
-              openTextSchema={openTextSchema}
               openLoadSchema={openLoadSchema}
-              openPredefinedSchema={openPredefinedSchema}
               openDataImporterSchema={openDataImporterSchema}
+              openTtlSchema={openTtlSchema}
               showEnhancementDialog={showEnhancementDialog}
               toggleEnhancementDialog={toggleEnhancementDialog}
               setOpenConnection={setOpenConnection}

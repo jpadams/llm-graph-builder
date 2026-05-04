@@ -21,9 +21,7 @@ import TooltipWrapper from '../../../UI/TipWrapper';
 export default function NewEntityExtractionSetting({
   view,
   onClose,
-  openTextSchema,
   openLoadSchema,
-  openPredefinedSchema,
   settingView,
   onContinue,
   closeEnhanceGraphSchemaDialog,
@@ -34,13 +32,12 @@ export default function NewEntityExtractionSetting({
   combinedRels,
   setCombinedRels,
   openDataImporterSchema,
+  openTtlSchema,
 }: {
   view: 'Dialog' | 'Tabs';
   open?: boolean;
   onClose?: () => void;
-  openTextSchema: () => void;
   openLoadSchema: () => void;
-  openPredefinedSchema: () => void;
   settingView: 'contentView' | 'headerView';
   onContinue?: () => void;
   closeEnhanceGraphSchemaDialog?: () => void;
@@ -51,6 +48,7 @@ export default function NewEntityExtractionSetting({
   combinedRels: OptionType[];
   setCombinedRels: Dispatch<SetStateAction<OptionType[]>>;
   openDataImporterSchema: () => void;
+  openTtlSchema: () => void;
 }) {
   const {
     setSelectedRels,
@@ -60,22 +58,18 @@ export default function NewEntityExtractionSetting({
     setUserDefinedNodes,
     setUserDefinedRels,
     setAllPatterns,
-    dbPattern,
-    setDbPattern,
-    setDbNodes,
-    setDbRels,
-    setSchemaValNodes,
-    setSchemaValRels,
-    schemaTextPattern,
-    setSchemaTextPattern,
-    setPreDefinedNodes,
-    setPreDefinedRels,
-    preDefinedPattern,
-    setPreDefinedPattern,
     setImporterNodes,
     setImporterRels,
     setImporterPattern,
     importerPattern,
+    dbWithPropsPattern,
+    setDbWithPropsPattern,
+    setDbWithPropsNodes,
+    setDbWithPropsRels,
+    dbNodeProperties,
+    setDbNodeProperties,
+    dbRelProperties,
+    setDbRelProperties,
   } = useFileContext();
   const { userCredentials } = useCredentials();
   const [openGraphView, setOpenGraphView] = useState<boolean>(false);
@@ -108,18 +102,6 @@ export default function NewEntityExtractionSetting({
     setUserDefinedPattern([]);
     setUserDefinedNodes([]);
     setUserDefinedRels([]);
-    // DB
-    setDbPattern([]);
-    setDbNodes([]);
-    setDbRels([]);
-    // Text
-    setSchemaTextPattern([]);
-    setSchemaValNodes([]);
-    setSchemaValRels([]);
-    // Predefined
-    setPreDefinedNodes([]);
-    setPreDefinedRels([]);
-    setPreDefinedPattern([]);
     setCombinedPatterns([]);
     setCombinedNodes([]);
     setCombinedRels([]);
@@ -132,6 +114,12 @@ export default function NewEntityExtractionSetting({
     setImporterNodes([]);
     setImporterRels([]);
     setImporterPattern([]);
+    // DB-with-properties clear
+    setDbWithPropsPattern([]);
+    setDbWithPropsNodes([]);
+    setDbWithPropsRels([]);
+    setDbNodeProperties({});
+    setDbRelProperties({});
   };
 
   const handleFinalApply = (pattern: string[], nodeLables: OptionType[], relationshipLabels: OptionType[]) => {
@@ -247,17 +235,11 @@ export default function NewEntityExtractionSetting({
     if (userDefinedPattern.includes(patternToRemove)) {
       updateStore(userDefinedPattern, patternToRemove, setUserDefinedPattern, setUserDefinedNodes, setUserDefinedRels);
     }
-    if (preDefinedPattern.includes(patternToRemove)) {
-      updateStore(preDefinedPattern, patternToRemove, setPreDefinedPattern, setPreDefinedNodes, setPreDefinedRels);
-    }
-    if (dbPattern.includes(patternToRemove)) {
-      updateStore(dbPattern, patternToRemove, setDbPattern, setDbNodes, setDbRels);
-    }
-    if (schemaTextPattern.includes(patternToRemove)) {
-      updateStore(schemaTextPattern, patternToRemove, setSchemaTextPattern, setSchemaValNodes, setSchemaValRels);
-    }
     if (importerPattern.includes(patternToRemove)) {
       updateStore(importerPattern, patternToRemove, setImporterPattern, setImporterNodes, setImporterRels);
+    }
+    if (dbWithPropsPattern.includes(patternToRemove)) {
+      updateStore(dbWithPropsPattern, patternToRemove, setDbWithPropsPattern, setDbWithPropsNodes, setDbWithPropsRels);
     }
     const updatedCombinedPatterns = combinedPatterns.filter((p) => p !== patternToRemove);
     setCombinedPatterns(updatedCombinedPatterns);
@@ -283,27 +265,7 @@ export default function NewEntityExtractionSetting({
     setTupleOptions((prev) => prev.filter((t) => t.label !== patternToRemove));
   };
 
-  const onSchemaFromTextCLick = () => {
-    if (view === 'Dialog' && onClose != undefined) {
-      onClose();
-    }
-    if (view === 'Tabs' && closeEnhanceGraphSchemaDialog != undefined) {
-      closeEnhanceGraphSchemaDialog();
-    }
-    openTextSchema();
-  };
-
-  const onPredefinedSchemaCLick = () => {
-    if (view === 'Dialog' && onClose != undefined) {
-      onClose();
-    }
-    if (view === 'Tabs' && closeEnhanceGraphSchemaDialog != undefined) {
-      closeEnhanceGraphSchemaDialog();
-    }
-    openPredefinedSchema();
-  };
-
-  const onLoadExistingSchemaCLick: MouseEventHandler<HTMLButtonElement> = useCallback(async () => {
+  const onLoadExistingSchemaClick: MouseEventHandler<HTMLButtonElement> = useCallback(async () => {
     if (view === 'Dialog' && onClose != undefined) {
       onClose();
     }
@@ -313,7 +275,7 @@ export default function NewEntityExtractionSetting({
     openLoadSchema();
   }, []);
 
-  const onDataImporterSchemaCLick: MouseEventHandler<HTMLButtonElement> = useCallback(async () => {
+  const onDataImporterSchemaClick: MouseEventHandler<HTMLButtonElement> = useCallback(async () => {
     if (view === 'Dialog' && onClose != undefined) {
       onClose();
     }
@@ -321,6 +283,16 @@ export default function NewEntityExtractionSetting({
       closeEnhanceGraphSchemaDialog();
     }
     openDataImporterSchema();
+  }, []);
+
+  const onTtlSchemaClick: MouseEventHandler<HTMLButtonElement> = useCallback(async () => {
+    if (view === 'Dialog' && onClose != undefined) {
+      onClose();
+    }
+    if (view === 'Tabs' && closeEnhanceGraphSchemaDialog != undefined) {
+      closeEnhanceGraphSchemaDialog();
+    }
+    openTtlSchema();
   }, []);
 
   return (
@@ -357,6 +329,8 @@ export default function NewEntityExtractionSetting({
           highlightPattern={highlightPattern ?? ''}
           nodes={combinedNodes}
           rels={combinedRels}
+          nodeProperties={dbNodeProperties}
+          relProperties={dbRelProperties}
         ></PatternContainer>
         <Flex className='my-8! mb-2 flex! items-center' flexDirection='row' justifyContent='flex-end'>
           <DropdownButton
@@ -376,35 +350,35 @@ export default function NewEntityExtractionSetting({
             >
               <Menu.Item
                 title={
-                  <TooltipWrapper hasButtonWrapper={true} placement='right' tooltip={tooltips.predinedSchema}>
-                    Predefined Schema
-                  </TooltipWrapper>
-                }
-                onClick={onPredefinedSchemaCLick}
-              />
-              <Menu.Item
-                title={
                   <TooltipWrapper hasButtonWrapper={true} placement='right' tooltip={tooltips.useExistingSchema}>
                     Load Existing Schema
                   </TooltipWrapper>
                 }
-                onClick={onLoadExistingSchemaCLick}
+                onClick={onLoadExistingSchemaClick}
               />
               <Menu.Item
                 title={
-                  <TooltipWrapper hasButtonWrapper={true} placement='right' tooltip={tooltips.createSchema}>
-                    Get Schema From Text
-                  </TooltipWrapper>
-                }
-                onClick={onSchemaFromTextCLick}
-              />
-              <Menu.Item
-                title={
-                  <TooltipWrapper hasButtonWrapper={true} placement='right' tooltip={tooltips.createSchema}>
+                  <TooltipWrapper
+                    hasButtonWrapper={true}
+                    placement='right'
+                    tooltip='Upload a Neo4j Data Importer JSON export. Labels, relationships, and any properties declared in the model will be used as guidance for extraction.'
+                  >
                     Data Importer JSON
                   </TooltipWrapper>
                 }
-                onClick={onDataImporterSchemaCLick}
+                onClick={onDataImporterSchemaClick}
+              />
+              <Menu.Item
+                title={
+                  <TooltipWrapper
+                    hasButtonWrapper={true}
+                    placement='right'
+                    tooltip='Upload an OWL ontology in Turtle (.ttl) format. owl:Class entries become labels; owl:DatatypeProperty/owl:ObjectProperty entries become typed properties and patterns.'
+                  >
+                    OWL Ontology (.ttl)
+                  </TooltipWrapper>
+                }
+                onClick={onTtlSchemaClick}
               />
             </Menu.Items>
           </Menu>

@@ -6,8 +6,10 @@ import {
   OptionType,
   showTextFromSchemaDialogType,
   schemaLoadDialogType,
+  schemaLoadWithPropertiesDialogType,
   predefinedSchemaDialogType,
   dataImporterSchemaDialogType,
+  ttlSchemaDialogType,
 } from '../types';
 import {
   chatModeLables,
@@ -73,6 +75,11 @@ const FileContextProvider: FC<FileContextProviderProps> = ({ children }) => {
     show: false,
   });
 
+  const [ttlSchemaDialog, setTtlSchemaDialog] = useState<ttlSchemaDialogType>({
+    triggeredFrom: '',
+    show: false,
+  });
+
   const [postProcessingTasks, setPostProcessingTasks] = useState<string[]>([
     'materialize_text_chunk_similarities',
     'enable_hybrid_search_and_fulltext_search_in_bloom',
@@ -104,6 +111,15 @@ const FileContextProvider: FC<FileContextProviderProps> = ({ children }) => {
   const [importerNodes, setImporterNodes] = useState<OptionType[]>([]);
   const [importerRels, setImporterRels] = useState<OptionType[]>([]);
   const [importerPattern, setImporterPattern] = useState<string[]>([]);
+
+  // Load Existing schema from db (with properties)
+  const [schemaLoadWithPropertiesDialog, setSchemaLoadWithPropertiesDialog] =
+    useState<schemaLoadWithPropertiesDialogType>({ triggeredFrom: '', show: false });
+  const [dbWithPropsNodes, setDbWithPropsNodes] = useState<OptionType[]>([]);
+  const [dbWithPropsRels, setDbWithPropsRels] = useState<OptionType[]>([]);
+  const [dbWithPropsPattern, setDbWithPropsPattern] = useState<string[]>([]);
+  const [dbNodeProperties, setDbNodeProperties] = useState<Record<string, string[]>>({});
+  const [dbRelProperties, setDbRelProperties] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     if (selectedNodeLabelstr != null) {
@@ -211,12 +227,26 @@ const FileContextProvider: FC<FileContextProviderProps> = ({ children }) => {
     setTargetOptions,
     dataImporterSchemaDialog,
     setDataImporterSchemaDialog,
+    ttlSchemaDialog,
+    setTtlSchemaDialog,
     importerNodes,
     setImporterNodes,
     importerRels,
     setImporterRels,
     importerPattern,
     setImporterPattern,
+    schemaLoadWithPropertiesDialog,
+    setSchemaLoadWithPropertiesDialog,
+    dbWithPropsNodes,
+    setDbWithPropsNodes,
+    dbWithPropsRels,
+    setDbWithPropsRels,
+    dbWithPropsPattern,
+    setDbWithPropsPattern,
+    dbNodeProperties,
+    setDbNodeProperties,
+    dbRelProperties,
+    setDbRelProperties,
   };
   return <FileContext.Provider value={value}>{children}</FileContext.Provider>;
 };

@@ -1,6 +1,6 @@
 import { Method } from 'axios';
 import { url } from './Utils';
-import { ExtractParams, UploadParams } from '../types';
+import { ExtractParams, SchemaSpec, UploadParams } from '../types';
 import { apiCall } from '../services/CommonAPI';
 import { getEmbeddingProvider, getEmbeddingModel } from './EmbeddingConfigUtils';
 
@@ -38,12 +38,25 @@ export const extractAPI = async (
   gcs_project_id?: string,
   language?: string,
   access_token?: string,
-  additional_instructions?: string
+  additional_instructions?: string,
+  nodeProperties?: Record<string, string[]>,
+  relationshipProperties?: Record<string, string[]>,
+  schemaSpec?: SchemaSpec | null
 ): Promise<any> => {
   const urlExtract = `${url()}/extract`;
   const method: Method = 'post';
   const embeddingProvider = getEmbeddingProvider();
   const embeddingModel = getEmbeddingModel();
+  // Backend expects JSON-encoded strings via Form() — only send when non-empty so we don't
+  // override the default ['description'] property handling for the no-properties case.
+  const nodePropertiesJson =
+    nodeProperties && Object.keys(nodeProperties).length > 0 ? JSON.stringify(nodeProperties) : undefined;
+  const relationshipPropertiesJson =
+    relationshipProperties && Object.keys(relationshipProperties).length > 0
+      ? JSON.stringify(relationshipProperties)
+      : undefined;
+  const schemaSpecJson = schemaSpec ? JSON.stringify(schemaSpec) : undefined;
+  const schemaSpread = schemaSpecJson ? { schemaSpec: schemaSpecJson } : {};
   let additionalParams: ExtractParams;
   if (source_type === 's3 bucket') {
     additionalParams = {
@@ -60,6 +73,9 @@ export const extractAPI = async (
       chunks_to_combine,
       retry_condition,
       additional_instructions,
+      ...(nodePropertiesJson ? { nodeProperties: nodePropertiesJson } : {}),
+      ...(relationshipPropertiesJson ? { relationshipProperties: relationshipPropertiesJson } : {}),
+      ...schemaSpread,
       embedding_provider: embeddingProvider,
       embedding_model: embeddingModel,
     };
@@ -77,6 +93,9 @@ export const extractAPI = async (
       language,
       retry_condition,
       additional_instructions,
+      ...(nodePropertiesJson ? { nodeProperties: nodePropertiesJson } : {}),
+      ...(relationshipPropertiesJson ? { relationshipProperties: relationshipPropertiesJson } : {}),
+      ...schemaSpread,
       embedding_provider: embeddingProvider,
       embedding_model: embeddingModel,
     };
@@ -97,6 +116,9 @@ export const extractAPI = async (
       access_token,
       retry_condition,
       additional_instructions,
+      ...(nodePropertiesJson ? { nodeProperties: nodePropertiesJson } : {}),
+      ...(relationshipPropertiesJson ? { relationshipProperties: relationshipPropertiesJson } : {}),
+      ...schemaSpread,
       embedding_provider: embeddingProvider,
       embedding_model: embeddingModel,
     };
@@ -113,6 +135,9 @@ export const extractAPI = async (
       chunks_to_combine,
       retry_condition,
       additional_instructions,
+      ...(nodePropertiesJson ? { nodeProperties: nodePropertiesJson } : {}),
+      ...(relationshipPropertiesJson ? { relationshipProperties: relationshipPropertiesJson } : {}),
+      ...schemaSpread,
       embedding_provider: embeddingProvider,
       embedding_model: embeddingModel,
     };
@@ -129,6 +154,9 @@ export const extractAPI = async (
       chunks_to_combine,
       retry_condition,
       additional_instructions,
+      ...(nodePropertiesJson ? { nodeProperties: nodePropertiesJson } : {}),
+      ...(relationshipPropertiesJson ? { relationshipProperties: relationshipPropertiesJson } : {}),
+      ...schemaSpread,
       embedding_provider: embeddingProvider,
       embedding_model: embeddingModel,
     };
@@ -144,6 +172,9 @@ export const extractAPI = async (
       chunks_to_combine,
       retry_condition,
       additional_instructions,
+      ...(nodePropertiesJson ? { nodeProperties: nodePropertiesJson } : {}),
+      ...(relationshipPropertiesJson ? { relationshipProperties: relationshipPropertiesJson } : {}),
+      ...schemaSpread,
       embedding_provider: embeddingProvider,
       embedding_model: embeddingModel,
     };

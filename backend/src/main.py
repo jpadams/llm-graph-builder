@@ -46,7 +46,6 @@ from src.shared.constants import (
     START_FROM_BEGINNING, START_FROM_LAST_PROCESSED_POSITION
 )
 from src.shared.llm_graph_builder_exception import LLMGraphBuilderException
-from src.shared.schema_extraction import schema_extraction_from_text
 
 warnings.filterwarnings("ignore")
 load_dotenv()
@@ -311,10 +310,28 @@ def create_source_node_graph_url_wikipedia(graph, params):
     lst_file_name=[]
     wiki_query_id, language = check_url_source(source_type=params.source_type, wiki_query=params.wiki_query)
     logging.info(f"Creating source node for {wiki_query_id.strip()}, {language}")
-    pages = WikipediaLoader(query=wiki_query_id.strip(), lang=language, load_max_docs=1, load_all_available_meta=True).load()
-    if pages==None or len(pages)==0:
-      failed_count+=1
-      message = f"Unable to read data for given Wikipedia url : {params.wiki_query}"
+    # WikipediaLoader (and the underlying `wikipedia` package) occasionally raises
+    # json.JSONDecodeError when MediaWiki returns an empty/HTML body (rate limits,
+    # transient 5xx, disambiguation edge cases). Retry once before giving up so the
+    # user gets a clear "couldn't fetch" instead of a raw "Expecting value: line 1
+    # column 1 (char 0)" stack trace.
+    pages = None
+    last_err = None
+    for attempt in range(2):
+      try:
+        pages = WikipediaLoader(query=wiki_query_id.strip(), lang=language, load_max_docs=1, load_all_available_meta=True).load()
+        break
+      except json.JSONDecodeError as e:
+        last_err = e
+        logging.warning(f"Wikipedia JSON decode error (attempt {attempt + 1}): {e}")
+        time.sleep(1)
+      except Exception as e:
+        last_err = e
+        break
+    if pages is None or len(pages) == 0:
+      failed_count += 1
+      detail = f": {last_err}" if last_err else ""
+      message = f"Unable to read data for given Wikipedia url: {params.wiki_query}{detail}"
       raise LLMGraphBuilderException(message)
     else:
       obj_source_node = sourceNode()
@@ -546,7 +563,7 @@ async def processing_source(credentials, params, pages, merged_file_path=None, i
           break
         else:
           processing_chunks_start_time = time.time()
-          node_count,rel_count,latency_processed_chunk,token_usage = await processing_chunks(selected_chunks,graph,credentials,params.file_name,params.model,params.allowedNodes,params.allowedRelationship,params.chunks_to_combine,node_count, rel_count, params.additional_instructions, params.embedding_provider, params.embedding_model)
+          node_count,rel_count,latency_processed_chunk,token_usage = await processing_chunks(selected_chunks,graph,credentials,params.file_name,params.model,params.allowedNodes,params.allowedRelationship,params.chunks_to_combine,node_count, rel_count, params.additional_instructions, params.embedding_provider, params.embedding_model, params.nodeProperties, params.relationshipProperties, params.schemaSpec)
           logging.info("Token used in processing chunks: %s", token_usage)
           tokens_per_file += token_usage
           logging.info("Total token used per file: %s", tokens_per_file)
@@ -647,7 +664,7 @@ async def processing_source(credentials, params, pages, merged_file_path=None, i
     logging.error(error_message)
     raise LLMGraphBuilderException(error_message)
 
-async def processing_chunks(chunkId_chunkDoc_list,graph,credentials,file_name,model,allowedNodes,allowedRelationship, chunks_to_combine, node_count, rel_count, additional_instructions, embedding_provider, embedding_model):
+async def processing_chunks(chunkId_chunkDoc_list,graph,credentials,file_name,model,allowedNodes,allowedRelationship, chunks_to_combine, node_count, rel_count, additional_instructions, embedding_provider, embedding_model, nodeProperties=None, relationshipProperties=None, schemaSpec=None):
   #create vector index and update chunk node with embedding
   latency_processing_chunk = {}
   if graph is not None:
@@ -665,7 +682,7 @@ async def processing_chunks(chunkId_chunkDoc_list,graph,credentials,file_name,mo
   logging.info("Get graph document list from models")
   
   start_entity_extraction = time.time()
-  graph_documents, token_usage =  await get_graph_from_llm(model, chunkId_chunkDoc_list, allowedNodes, allowedRelationship, chunks_to_combine, additional_instructions)
+  graph_documents, token_usage =  await get_graph_from_llm(model, chunkId_chunkDoc_list, allowedNodes, allowedRelationship, chunks_to_combine, additional_instructions, nodeProperties, relationshipProperties, schemaSpec)
   end_entity_extraction = time.time()
   elapsed_entity_extraction = end_entity_extraction - start_entity_extraction
   logging.info(f'Time taken to extract enitities from LLM Graph Builder: {elapsed_entity_extraction:.2f} seconds')
@@ -921,6 +938,60 @@ def get_labels_and_relationtypes(credentials):
       triples.add(f"{from_label}-{rel_type}->{to_label}")
   return {"triplets": list(triples)}
 
+def get_labels_relationtypes_and_properties(credentials):
+  """
+  Like get_labels_and_relationtypes, but additionally returns the property names
+  declared per node label and per relationship type, so the client can use those
+  as the property schema for LLM extraction.
+
+  Returns:
+      dict: {
+          "triplets": ["Label1-RELTYPE->Label2", ...],
+          "nodeProperties": {"Label1": ["prop1", "prop2"], ...},
+          "relationshipProperties": {"RELTYPE": ["prop1", ...], ...},
+      }
+  """
+  excluded_labels = {'Document', 'Chunk', '_Bloom_Perspective_', '__Community__', '__Entity__', 'Session', 'Message'}
+  excluded_relationships = {
+      'NEXT_CHUNK', '_Bloom_Perspective_', 'FIRST_CHUNK',
+      'SIMILAR', 'IN_COMMUNITY', 'PARENT_COMMUNITY', 'NEXT', 'LAST_MESSAGE',
+      'PART_OF', 'HAS_ENTITY',
+  }
+  excluded_properties = {'embedding', 'fastrp_embedding', 'id', 'elementId'}
+
+  base = get_labels_and_relationtypes(credentials)
+  triplets = base["triplets"]
+
+  node_props = {}
+  rel_props = {}
+
+  driver = get_graphDB_driver(credentials)
+  with driver.session(database=credentials.database) as session:
+    for record in session.run("CALL db.schema.nodeTypeProperties()"):
+      labels = record.get("nodeLabels") or []
+      prop = record.get("propertyName")
+      if not prop or prop in excluded_properties:
+          continue
+      for label in labels:
+        if label in excluded_labels:
+            continue
+        node_props.setdefault(label, set()).add(prop)
+
+    for record in session.run("CALL db.schema.relTypeProperties()"):
+      rel_type = (record.get("relType") or "").strip(":`")
+      prop = record.get("propertyName")
+      if not rel_type or rel_type in excluded_relationships:
+          continue
+      if not prop or prop in excluded_properties:
+          continue
+      rel_props.setdefault(rel_type, set()).add(prop)
+
+  return {
+      "triplets": triplets,
+      "nodeProperties": {k: sorted(v) for k, v in node_props.items()},
+      "relationshipProperties": {k: sorted(v) for k, v in rel_props.items()},
+  }
+
 def manually_cancelled_job(graph, filenames, source_types, merged_dir, uri):
   
   filename_list= list(map(str.strip, json.loads(filenames)))
@@ -938,20 +1009,6 @@ def manually_cancelled_job(graph, filenames, source_types, merged_dir, uri):
       graphDb_data_Access.update_node_relationship_count(file_name)
       obj_source_node = None
   return "Cancelled the processing job successfully"
-
-def populate_graph_schema_from_text(text, model, is_schema_description_checked, is_local_storage):
-  """_summary_
-
-  Args:
-      graph (Neo4Graph): Neo4jGraph connection object
-      input_text (str): rendom text from PDF or user input.
-      model (str): AI model to use extraction from text
-
-  Returns:
-      data (list): list of lebels and relationTypes
-  """
-  result = schema_extraction_from_text(text, model, is_schema_description_checked, is_local_storage)
-  return result
 
 def set_status_retry(graph, file_name, retry_condition):
     """

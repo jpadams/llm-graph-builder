@@ -33,24 +33,13 @@ export default function GraphEnhancementDialog({
   const { breakpoints } = tokens;
   const [orphanDeleteAPIloading, setorphanDeleteAPIloading] = useState<boolean>(false);
   const {
-    setShowTextFromSchemaDialog,
-    setSchemaLoadDialog,
-    setPredefinedSchemaDialog,
+    setSchemaLoadWithPropertiesDialog,
     setUserDefinedPattern,
     setUserDefinedNodes,
     setUserDefinedRels,
-    setDbPattern,
-    setDbNodes,
-    setDbRels,
-    setSchemaValNodes,
-    setSchemaValRels,
-    setSchemaTextPattern,
-    setPreDefinedNodes,
-    setPreDefinedRels,
-    setPreDefinedPattern,
-    setSelectedPreDefOption,
     allPatterns,
     setDataImporterSchemaDialog,
+    setTtlSchemaDialog,
     setImporterNodes,
     setImporterPattern,
     setImporterRels,
@@ -77,18 +66,6 @@ export default function GraphEnhancementDialog({
     setUserDefinedPattern([]);
     setUserDefinedNodes([]);
     setUserDefinedRels([]);
-    // DB
-    setDbPattern([]);
-    setDbNodes([]);
-    setDbRels([]);
-    // Text
-    setSchemaTextPattern([]);
-    setSchemaValNodes([]);
-    setSchemaValRels([]);
-    // Predefined
-    setPreDefinedNodes([]);
-    setPreDefinedRels([]);
-    setPreDefinedPattern([]);
     // combined Nodes and rels
     setCombinedNodes([]);
     setCombinedRels([]);
@@ -97,7 +74,6 @@ export default function GraphEnhancementDialog({
     setImporterNodes([]);
     setImporterPattern([]);
     setImporterRels([]);
-    setSelectedPreDefOption(null);
     onClose();
   };
 
@@ -189,13 +165,9 @@ export default function GraphEnhancementDialog({
           <div className='w-[80%] mx-auto'>
             <NewEntityExtractionSetting
               view='Tabs'
-              openTextSchema={() => {
-                setShowTextFromSchemaDialog({ triggeredFrom: 'enhancementtab', show: true });
-              }}
-              openLoadSchema={() => setSchemaLoadDialog({ triggeredFrom: 'enhancementtab', show: true })}
-              openPredefinedSchema={() => {
-                setPredefinedSchemaDialog({ triggeredFrom: 'enhancementtab', show: true });
-              }}
+              openLoadSchema={() =>
+                setSchemaLoadWithPropertiesDialog({ triggeredFrom: 'enhancementtab', show: true })
+              }
               closeEnhanceGraphSchemaDialog={onClose}
               settingView='headerView'
               combinedPatterns={combinedPatterns}
@@ -206,6 +178,9 @@ export default function GraphEnhancementDialog({
               setCombinedRels={setCombinedRels}
               openDataImporterSchema={() => {
                 setDataImporterSchemaDialog({ triggeredFrom: 'enhancementtab', show: true });
+              }}
+              openTtlSchema={() => {
+                setTtlSchemaDialog({ triggeredFrom: 'enhancementtab', show: true });
               }}
             />
           </div>

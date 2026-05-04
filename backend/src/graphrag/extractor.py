@@ -117,9 +117,13 @@ async def extract_via_graphrag(
         len(combined_chunk_document_list),
     )
 
+    # OnError.RAISE rather than IGNORE: the per-chunk try/except below catches
+    # and logs each failure with the upstream traceback, which is far more
+    # debuggable than the silenced "validation failed → empty Neo4jGraph()"
+    # path the extractor uses internally with IGNORE.
     extractor = LLMEntityRelationExtractor(
         llm=llm,
-        on_error=OnError.IGNORE,
+        on_error=OnError.RAISE,
         create_lexical_graph=False,
     )
 
@@ -147,6 +151,9 @@ async def extract_via_graphrag(
             logging.error("graphrag extractor failed on chunk %d: %s", i, exc, exc_info=True)
             graph_documents.append(GraphDocument(nodes=[], relationships=[], source=doc))
             continue
+        n_nodes = len(getattr(extracted, "nodes", []) or [])
+        n_rels = len(getattr(extracted, "relationships", []) or [])
+        logging.info("graphrag chunk %d: %d nodes, %d relationships extracted", i, n_nodes, n_rels)
         graph_documents.append(_to_graph_document(extracted, doc))
 
     return graph_documents, counter.total_tokens

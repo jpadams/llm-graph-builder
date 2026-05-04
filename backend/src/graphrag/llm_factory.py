@@ -23,6 +23,24 @@ from src.shared.llm_graph_builder_exception import LLMGraphBuilderException
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 FIREWORKS_BASE_URL = "https://api.fireworks.ai/inference/v1"
 
+# OpenAI reasoning families (gpt-5*, o1*, o3*, o4*) reject ``temperature``
+# values other than the default 1 and accept ``reasoning_effort``.
+# Mirrors the legacy patch in user-data.sh that adapts ChatOpenAI for these
+# models. Default to ``minimal`` for speed; the typed schema does the heavy
+# lifting that prose hints used to need.
+_REASONING_PREFIXES = ("gpt-5", "o1", "o3", "o4")
+
+
+def _is_reasoning_model(model_id: str) -> bool:
+    name = model_id.lower()
+    return any(name.startswith(prefix) for prefix in _REASONING_PREFIXES)
+
+
+def _openai_model_params(model_id: str) -> dict[str, Any]:
+    if _is_reasoning_model(model_id):
+        return {"reasoning_effort": "minimal"}
+    return {"temperature": 0}
+
 
 def _build_llm(model: str, env_value: str) -> tuple[Any, str]:
     """Construct an LLMInterface based on the model-name keyword.
@@ -42,7 +60,7 @@ def _build_llm(model: str, env_value: str) -> tuple[Any, str]:
         return (
             AzureOpenAILLM(
                 model_name=model_name,
-                model_params={"temperature": 0},
+                model_params=_openai_model_params(model_name),
                 api_key=api_key,
                 azure_endpoint=api_endpoint,
                 api_version=api_version,
@@ -55,7 +73,7 @@ def _build_llm(model: str, env_value: str) -> tuple[Any, str]:
 
         model_name, api_key = env_value.split(",")
         return (
-            OpenAILLM(model_name=model_name, model_params={"temperature": 0}, api_key=api_key),
+            OpenAILLM(model_name=model_name, model_params=_openai_model_params(model_name), api_key=api_key),
             model_name,
         )
 
@@ -75,7 +93,7 @@ def _build_llm(model: str, env_value: str) -> tuple[Any, str]:
         return (
             OpenAILLM(
                 model_name=model_name,
-                model_params={"temperature": 0},
+                model_params=_openai_model_params(model_name),
                 api_key=api_key,
                 base_url=FIREWORKS_BASE_URL,
             ),
@@ -101,7 +119,7 @@ def _build_llm(model: str, env_value: str) -> tuple[Any, str]:
         return (
             OpenAILLM(
                 model_name=model_name,
-                model_params={"temperature": 0},
+                model_params=_openai_model_params(model_name),
                 api_key=api_key,
                 base_url=base_url or GROQ_BASE_URL,
             ),
@@ -156,7 +174,7 @@ def _build_llm(model: str, env_value: str) -> tuple[Any, str]:
     return (
         OpenAILLM(
             model_name=model_name,
-            model_params={"temperature": 0},
+            model_params=_openai_model_params(model_name),
             api_key=api_key,
             base_url=api_endpoint,
         ),

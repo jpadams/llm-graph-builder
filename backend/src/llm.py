@@ -51,18 +51,27 @@ def get_llm(model: str):
             )
         elif "OPENAI" in model:
             model_name, api_key = env_value.split(",")
+            # GPT-5 family (and o1/o3/o4) reasoning models reject temperature != 1
+            # and accept reasoning_effort. Default to "minimal" since reasoning
+            # tokens dominate latency for entity extraction / chat.
+            is_reasoning = any(tag in model for tag in ("GPT_5", "_O1", "_O3", "_O4"))
+            extra = {"reasoning_effort": "minimal"} if is_reasoning else {}
+            kw = {} if is_reasoning else {"temperature": 0}
             if "MINI" in model:
-                llm= ChatOpenAI(
-                api_key=api_key,
-                model=model_name,
-                callbacks=callback_manager,
+                llm = ChatOpenAI(
+                    api_key=api_key,
+                    model=model_name,
+                    callbacks=callback_manager,
+                    **kw,
+                    **extra,
                 )
             else:
                 llm = ChatOpenAI(
-                api_key=api_key,
-                model=model_name,
-                temperature=0,
-                callbacks=callback_manager,
+                    api_key=api_key,
+                    model=model_name,
+                    callbacks=callback_manager,
+                    **kw,
+                    **extra,
                 )
 
         elif "AZURE" in model:

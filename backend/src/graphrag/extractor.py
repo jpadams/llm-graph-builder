@@ -106,22 +106,29 @@ async def extract_via_graphrag(
     from neo4j_graphrag.experimental.components.types import TextChunk, TextChunks
 
     llm, model_name, counter = get_graphrag_llm(model)
+    schema_is_empty = not (schema_spec.nodes or schema_spec.relationships or schema_spec.patterns)
     logging.info(
-        "graphrag extractor: model=%s, schema=%d nodes / %d rels / %d patterns, chunks=%d",
+        "graphrag extractor: model=%s, schema=%d nodes / %d rels / %d patterns%s, chunks=%d",
         model_name,
         len(schema_spec.nodes),
         len(schema_spec.relationships),
         len(schema_spec.patterns),
+        " (open extraction — no schema)" if schema_is_empty else "",
         len(combined_chunk_document_list),
     )
-
-    schema = to_graph_schema(schema_spec)
 
     extractor = LLMEntityRelationExtractor(
         llm=llm,
         on_error=OnError.IGNORE,
         create_lexical_graph=False,
     )
+
+    # When the user didn't supply a schema we let the LLM extract freely
+    # (matches the legacy LLMGraphTransformer-with-empty-allowed-nodes behavior).
+    # SchemaBuilder().create_schema_model rejects empty input, so we skip it.
+    run_kwargs: dict[str, Any] = {}
+    if not schema_is_empty:
+        run_kwargs["schema"] = to_graph_schema(schema_spec)
 
     graph_documents: list[GraphDocument] = []
     for i, doc in enumerate(combined_chunk_document_list):
@@ -135,7 +142,7 @@ async def extract_via_graphrag(
             ]
         )
         try:
-            extracted = await extractor.run(chunks=chunks, schema=schema)
+            extracted = await extractor.run(chunks=chunks, **run_kwargs)
         except Exception as exc:
             logging.error("graphrag extractor failed on chunk %d: %s", i, exc, exc_info=True)
             graph_documents.append(GraphDocument(nodes=[], relationships=[], source=doc))

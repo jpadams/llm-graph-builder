@@ -114,6 +114,7 @@ const Content: React.FC<ContentProps> = ({
     selectedChunk_overlap,
     selectedChunks_to_combine,
     setSelectedNodes,
+    allPatterns,
     setAllPatterns,
     setRowSelection,
     setSelectedRels,
@@ -347,6 +348,22 @@ const Content: React.FC<ContentProps> = ({
         Object.entries(dbRelProperties ?? {}).filter(([relType]) => selectedRelTypeSet.has(relType))
       );
 
+      const schemaSpecPayload = buildSchemaSpec(
+        selectedNodes,
+        selectedRels,
+        combinedPatterns,
+        scopedNodeProperties,
+        scopedRelProperties
+      );
+      // Workshop UX: extraction is meaningful only with a typed schema, so refuse
+      // to fire /extract when the user hasn't applied one. The Generate Graph
+      // button is also disabled in this state, but extraction can be triggered
+      // from row-level retry/reprocess actions, so guard at the call site too.
+      if (!schemaSpecPayload || schemaSpecPayload.nodes.length === 0) {
+        throw new Error(
+          'No schema applied. Open Graph Settings → Entity Extraction Settings, pick a source under "Add Schema from...", and click Apply Graph Settings before extracting.'
+        );
+      }
       const apiResponse = await extractAPI(
         model,
         fileItem.fileSource,
@@ -366,7 +383,7 @@ const Content: React.FC<ContentProps> = ({
         fileItem.language,
         fileItem.accessToken,
         additionalInstructions,
-        buildSchemaSpec(selectedNodes, selectedRels, combinedPatterns, scopedNodeProperties, scopedRelProperties)
+        schemaSpecPayload
       );
       if (apiResponse?.status === 'Failed') {
         let errorobj = { error: apiResponse.error, message: apiResponse.message, fileName: apiResponse.file_name };
@@ -747,6 +764,8 @@ const Content: React.FC<ContentProps> = ({
     [selectedfileslength, filesData, newFilecheck]
   );
 
+  const noSchemaApplied = useMemo(() => allPatterns.length === 0, [allPatterns]);
+
   const showGraphCheck = useMemo(
     () => (selectedfileslength ? completedfileNo === 0 : true),
     [selectedfileslength, completedfileNo]
@@ -1065,17 +1084,23 @@ const Content: React.FC<ContentProps> = ({
           <Flex flexDirection='row' gap='4' className='self-end mb-2.5' flexWrap='wrap'>
             <SpotlightTarget id='generategraphbtn'>
               <ButtonWithToolTip
-                text={!isAuthenticated ? 'Please log in first' : tooltips.generateGraph}
+                text={
+                  !isAuthenticated
+                    ? 'Please log in first'
+                    : noSchemaApplied
+                      ? 'Apply a schema first — open Graph Settings → Entity Extraction Settings, choose a source under "Add Schema from..." and click Apply Graph Settings.'
+                      : tooltips.generateGraph
+                }
                 placement='top'
                 label='generate graph'
                 onClick={onClickHandler}
-                disabled={disableCheck || isReadOnlyUser}
+                disabled={disableCheck || isReadOnlyUser || noSchemaApplied}
                 className='mr-0.5'
                 size={isTablet ? 'small' : 'medium'}
                 alwaysShowTooltip={true}
               >
                 {buttonCaptions.generateGraph}{' '}
-                {selectedfileslength && !disableCheck && newFilecheck ? `(${newFilecheck})` : ''}
+                {selectedfileslength && !disableCheck && !noSchemaApplied && newFilecheck ? `(${newFilecheck})` : ''}
               </ButtonWithToolTip>
             </SpotlightTarget>
             <ButtonWithToolTip

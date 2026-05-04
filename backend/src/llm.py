@@ -231,6 +231,13 @@ async def get_graph_from_llm(
             None,
         )
 
+        if not (spec.nodes or spec.relationships or spec.patterns):
+            raise LLMGraphBuilderException(
+                "No schema applied. Open Graph Settings → Entity Extraction Settings, "
+                "pick a source under \"Add Schema from...\", and click Apply Graph Settings "
+                "before extracting."
+            )
+
         graph_document_list, token_usage = await extract_via_graphrag(
             model=model,
             combined_chunk_document_list=combined_chunk_document_list,

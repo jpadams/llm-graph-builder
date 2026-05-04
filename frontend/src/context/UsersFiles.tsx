@@ -31,6 +31,7 @@ const FileContextProvider: FC<FileContextProviderProps> = ({ children }) => {
   const isProdEnv = import.meta.env.VITE_ENV === 'PROD';
   const selectedNodeLabelstr = localStorage.getItem('selectedNodeLabels');
   const selectedNodeRelsstr = localStorage.getItem('selectedRelationshipLabels');
+  const selectedPatternStr = localStorage.getItem('selectedPattern');
   const chunkConfig = getChunkConfig();
   const persistedQueue = localStorage.getItem('waitingQueue');
   const selectedModel = localStorage.getItem('selectedModel');
@@ -135,16 +136,16 @@ const FileContextProvider: FC<FileContextProviderProps> = ({ children }) => {
         setSelectedRels(selectedNodeRels.selectedOptions);
       }
     }
-    if (selectedNodeRelsstr != null) {
-      const selectedNodeRels = JSON.parse(selectedNodeRelsstr);
-      if (userCredentials?.uri === selectedNodeRels.db) {
-        const rels = selectedNodeRels.selectedOptions;
-        setSelectedRels(rels);
-        const generatedPatterns = rels.map((rel: { value: string }) => {
-          const [source, type, target] = rel.value.split(',');
-          return `(${source})-[${type}]->(${target})`;
-        });
-        setAllPatterns(generatedPatterns);
+    // Restore allPatterns from the canonical 'selectedPattern' localStorage entry
+    // saved by NewEntityExtractionSetting.handleFinalApply. Previously this was
+    // regenerated from selectedRels with an incorrect "(src)-[rel]->(tgt)" syntax
+    // that didn't match the rest of the codebase's "src -[:rel]-> tgt" format —
+    // result was that the UI sometimes showed a schema (selectedNodes/Rels) but
+    // the pattern strings used everywhere else were malformed/empty.
+    if (selectedPatternStr != null) {
+      const selectedPattern = JSON.parse(selectedPatternStr);
+      if (userCredentials?.uri === selectedPattern.db && Array.isArray(selectedPattern.selectedOptions)) {
+        setAllPatterns(selectedPattern.selectedOptions);
       }
     }
   }, [userCredentials]);
